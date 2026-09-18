@@ -1,0 +1,418 @@
+<div class="app-container">
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-info">
+          <div class="brand-title">
+            Transpile<span class="brand-accent">.io</span>
+            <span class="version-tag">Universal 1:1</span>
+          </div>
+          <p class="brand-subtitle">Conversor e Transpilador de Endpoints de APIs para Python</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Backend Status Badge -->
+      <div class="status-pill" [class.online]="backendOnline()" [class.offline]="!backendOnline()" (click)="checkHealth()" title="Clique para retestar conexão">
+        <span class="status-dot"></span>
+        <span class="status-label">{{ backendOnline() ? 'FastAPI Conectado' : 'Backend Offline' }}</span>
+      </div>
+
+      <!-- API Key Trigger -->
+      <button class="btn-api-key" (click)="openApiKeyModal()" [class.key-configured]="hasApiKey()">
+        <span class="key-icon">🔑</span>
+        <span>{{ hasApiKey() ? 'Chave Gemini Ativa' : 'Configurar Chave Gemini' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Quick Presets Bar -->
+  <section class="presets-bar">
+    <span class="presets-label">⚡ Carregar Exemplos Prontos:</span>
+    <div class="presets-list">
+      @for (preset of presets(); track preset.id) {
+        <button
+          class="preset-chip"
+          [class.active]="activePresetId() === preset.id"
+          (click)="applyPreset(preset)"
+        >
+          <span class="preset-lang-dot"></span>
+          {{ preset.name }}
+        </button>
+      }
+    </div>
+  </section>
+
+  <!-- Main Conversion Control Toolbar -->
+  <section class="toolbar-card">
+    <div class="toolbar-left">
+      <!-- Source Language Selector -->
+      <div class="selector-group">
+        <label for="sourceLang">Linguagem de Origem</label>
+        <div class="custom-select-wrap">
+          <select id="sourceLang" [(ngModel)]="sourceLanguage">
+            <option value="Auto-detect">✨ Auto-detectar Linguagem</option>
+            <option value="C# / .NET">C# / ASP.NET Core</option>
+            <option value="TypeScript / Express">Node.js / Express (TS/JS)</option>
+            <option value="Java / Spring Boot">Java / Spring Boot</option>
+            <option value="PHP / Laravel">PHP / Laravel</option>
+            <option value="Go / Gin">Go / Gin Framework</option>
+            <option value="Ruby on Rails">Ruby on Rails</option>
+            <option value="Python Flask">Python (Flask p/ FastAPI)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="arrow-separator">➔</div>
+
+      <!-- Target Framework Selector -->
+      <div class="selector-group">
+        <label for="targetFramework">Framework de Destino</label>
+        <div class="custom-select-wrap highlight">
+          <select id="targetFramework" [(ngModel)]="targetFramework">
+            <option value="FastAPI">Python (FastAPI + Pydantic v2) ⭐</option>
+            <option value="Flask">Python (Flask + Marshmallow)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Conversion Mode Toggle -->
+      <div class="selector-group">
+        <label>Modo de Transpilação</label>
+        <div class="mode-toggle">
+          <button
+            type="button"
+            class="mode-btn"
+            [class.active]="conversionMode() === 'strict'"
+            (click)="conversionMode.set('strict')"
+            title="Mantém a estrutura idêntica linha por linha, sem alterar convenções"
+          >
+            🛡️ Estrito 1:1
+          </button>
+          <button
+            type="button"
+            class="mode-btn"
+            [class.active]="conversionMode() === 'idiomatic'"
+            (click)="conversionMode.set('idiomatic')"
+            title="Aplica boas práticas Python modernas: async/await, tipagem estrita e Pydantic v2"
+          >
+            🚀 Idiomático
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <!-- Main Action Button -->
+      <button
+        class="btn-transpile"
+        [disabled]="isLoading() || !sourceCode().trim()"
+        (click)="transpile()"
+        title="Atalho: Ctrl + Enter"
+      >
+        @if (isLoading()) {
+          <span class="spinner"></span>
+          <span>Transpilando com Gemini...</span>
+        } @else {
+          <span class="btn-icon">⚡</span>
+          <span>Transpilar Endpoint</span>
+          <kbd class="shortcut-badge">Ctrl+Enter</kbd>
+        }
+      </button>
+    </div>
+  </section>
+
+  <!-- Split View Editors Section -->
+  <main class="split-editor-grid">
+    <!-- Left Pane: Source Code -->
+    <div class="editor-pane source-pane">
+      <div class="pane-header">
+        <div class="pane-title">
+          <span class="pane-tag tag-source">ORIGEM</span>
+          <span class="lang-indicator">{{ sourceLanguage() }}</span>
+          <span class="line-counter">{{ sourceLines().length }} linhas</span>
+        </div>
+        <div class="pane-actions">
+          <button class="pane-btn" (click)="pasteFromClipboard()" title="Colar da área de transferência">
+            📋 Colar
+          </button>
+          <button class="pane-btn btn-danger" (click)="clearSource()" title="Limpar editor">
+            🗑️ Limpar
+          </button>
+        </div>
+      </div>
+
+      <div class="editor-viewport">
+        <!-- Line Numbers Gutter -->
+        <div class="line-numbers">
+          @for (num of sourceLines(); track num) {
+            <span class="line-num">{{ num }}</span>
+          }
+        </div>
+        <!-- Source Code Area -->
+        <textarea
+          class="code-textarea"
+          [(ngModel)]="sourceCode"
+          placeholder="// Cole aqui o código do endpoint em C#, Java, Node.js, PHP, Go, etc.&#10;// Exemplo: controllers, rotas, anotações, DTOs e regras de negócio..."
+          spellcheck="false"
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Right Pane: Target Python Code -->
+    <div class="editor-pane target-pane">
+      <div class="pane-header">
+        <div class="pane-title">
+          <span class="pane-tag tag-target">PYTHON ({{ targetFramework() }})</span>
+          @if (validationResult()) {
+            @if (validationResult()?.is_valid) {
+              <span class="ast-badge valid" title="Código Python analisado e aprovado pelo módulo ast">
+                ✓ AST Python Validado
+              </span>
+            } @else {
+              <span class="ast-badge invalid" [title]="validationResult()?.syntax_error">
+                ⚠ Erro Sintático na Linha {{ validationResult()?.error_line }}
+              </span>
+            }
+          }
+          <span class="line-counter">{{ targetLines().length }} linhas</span>
+        </div>
+        <div class="pane-actions">
+          <button
+            class="pane-btn btn-action"
+            [disabled]="!targetCode()"
+            (click)="copyTargetCode()"
+            title="Copiar código Python"
+          >
+            {{ copyFeedback() ? '✓ Copiado!' : '📋 Copiar Código' }}
+          </button>
+          <button
+            class="pane-btn btn-action highlight"
+            [disabled]="!targetCode()"
+            (click)="downloadTargetFile()"
+            title="Baixar arquivo .py pronto para execução"
+          >
+            ⬇️ Baixar .py
+          </button>
+        </div>
+      </div>
+
+      <div class="editor-viewport target-viewport">
+        <div class="line-numbers">
+          @for (num of targetLines(); track num) {
+            <span class="line-num">{{ num }}</span>
+          }
+        </div>
+        @if (targetCode()) {
+          <pre class="code-display"><code>{{ targetCode() }}</code></pre>
+        } @else {
+          <div class="empty-state-target">
+            <div class="empty-icon">🐍</div>
+            <h3>Nenhum código gerado ainda</h3>
+            <p>Selecione um exemplo acima ou cole seu endpoint no painel esquerdo e clique em <strong>Transpilar Endpoint</strong>.</p>
+            <div class="guarantee-box">
+              <span class="shield-icon">🛡️</span>
+              <div>
+                <strong>Zero Alucinação:</strong>
+                <small>Execução determinística com temperatura 0.0 e validação de compilação AST no backend.</small>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  </main>
+
+  <!-- Audit & Mapping Drawer -->
+  @if (lastResponse() && lastResponse()?.success) {
+    <section class="audit-section animate-fade-in">
+      <div class="audit-header">
+        <div class="audit-title">
+          <span class="audit-icon">🔍</span>
+          <h3>Auditoria de Transpilação & Mapeamento 1:1</h3>
+        </div>
+        <div class="audit-tabs">
+          <button
+            class="audit-tab-btn"
+            [class.active]="activeTab() === 'endpoints'"
+            (click)="activeTab.set('endpoints')"
+          >
+            ⇄ Endpoints Identificados ({{ lastResponse()?.endpoints_mapping?.length || 0 }})
+          </button>
+          <button
+            class="audit-tab-btn"
+            [class.active]="activeTab() === 'models'"
+            (click)="activeTab.set('models')"
+          >
+            ❖ Modelos Pydantic ({{ lastResponse()?.models_mapping?.length || 0 }})
+          </button>
+          <button
+            class="audit-tab-btn"
+            [class.active]="activeTab() === 'deps'"
+            (click)="activeTab.set('deps')"
+          >
+            📦 Instalação Pip ({{ lastResponse()?.pip_dependencies?.length || 0 }})
+          </button>
+          <button
+            class="audit-tab-btn"
+            [class.active]="activeTab() === 'fidelity'"
+            (click)="activeTab.set('fidelity')"
+          >
+            🛡️ Relatório de Fidelidade
+          </button>
+        </div>
+      </div>
+
+      <div class="audit-body">
+        <!-- Endpoints Mapping Tab -->
+        @if (activeTab() === 'endpoints') {
+          <div class="table-responsive">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Método</th>
+                  <th>Rota Original</th>
+                  <th>Rota em Python</th>
+                  <th>Handler Original</th>
+                  <th>Função Python Gerada</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (ep of lastResponse()?.endpoints_mapping; track ep.target_route) {
+                  <tr>
+                    <td><span class="method-tag method-{{ ep.http_method.toLowerCase() }}">{{ ep.http_method }}</span></td>
+                    <td class="font-mono">{{ ep.original_route }}</td>
+                    <td class="font-mono text-cyan">{{ ep.target_route }}</td>
+                    <td class="font-mono text-muted">{{ ep.original_handler }}</td>
+                    <td class="font-mono text-emerald">def {{ ep.target_function }}()</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Models Mapping Tab -->
+        @if (activeTab() === 'models') {
+          <div class="table-responsive">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Tipo / DTO Original</th>
+                  <th>Modelo Pydantic Gerado</th>
+                  <th>Resumo de Campos e Tipagem</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (model of lastResponse()?.models_mapping; track model.target_pydantic_model) {
+                  <tr>
+                    <td class="font-mono text-muted">{{ model.original_type }}</td>
+                    <td class="font-mono text-emerald">class {{ model.target_pydantic_model }}(BaseModel)</td>
+                    <td>{{ model.fields_summary }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Pip Dependencies Tab -->
+        @if (activeTab() === 'deps') {
+          <div class="deps-view">
+            <p>Execute o comando abaixo no terminal do seu projeto Python para instalar as bibliotecas necessárias:</p>
+            <div class="terminal-cmd">
+              <code>pip install {{ lastResponse()?.pip_dependencies?.join(' ') }}</code>
+              <button class="btn-copy-cmd" (click)="copyPipDependencies()">Copiar Comando</button>
+            </div>
+          </div>
+        }
+
+        <!-- Fidelity Notes Tab -->
+        @if (activeTab() === 'fidelity') {
+          <div class="fidelity-view">
+            <div class="fidelity-badge-card">
+              <div class="badge-icon">✅</div>
+              <div>
+                <strong>Garantia de Fidelidade 1:1</strong>
+                <p>Nenhuma rota, regra de negócio, mock ou dado fictício foi injetado pelo modelo. Toda lógica de validação e retorno HTTP foi preservada.</p>
+              </div>
+            </div>
+            <ul class="fidelity-list">
+              @for (note of lastResponse()?.fidelity_notes; track note) {
+                <li>{{ note }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <!-- API Key Modal Dialog -->
+  @if (showApiKeyModal()) {
+    <div class="modal-backdrop" (click)="closeApiKeyModal()">
+      <div class="modal-card animate-fade-in" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span class="modal-icon">🔑</span>
+            <h3>Configurar Chave da API do Google Gemini</h3>
+          </div>
+          <button class="btn-close" (click)="closeApiKeyModal()">×</button>
+        </div>
+
+        <div class="modal-body">
+          <p class="modal-desc">
+            Para realizar as conversões com máxima fidelidade e temperatura zero, você pode usar uma chave do Google Gemini.
+          </p>
+
+          <div class="server-key-info" [class.active]="hasServerKey()">
+            @if (hasServerKey()) {
+              <span>✓ O servidor já possui uma chave configurada no arquivo <code>.env</code>. Você pode sobrescrevê-la aqui se desejar.</span>
+            } @else {
+              <span>ℹ Nenhuma chave foi configurada no <code>.env</code> do servidor. Insira sua chave pessoal abaixo para utilizá-la:</span>
+            }
+          </div>
+
+          <div class="form-group">
+            <label for="apiKeyInput">Google Gemini API Key:</label>
+            <input
+              id="apiKeyInput"
+              type="password"
+              class="modal-input font-mono"
+              placeholder="AIzaSy..."
+              [(ngModel)]="apiKeyInput"
+            />
+          </div>
+
+          <div class="help-box">
+            <span>💡 Como obter uma chave gratuita:</span>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
+              Acesse o Google AI Studio ↗
+            </a>
+            <small>A chave gratuita possui limites generosos e é criada em menos de 1 minuto.</small>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="modal-btn-cancel" (click)="closeApiKeyModal()">Cancelar</button>
+          <button class="modal-btn-save" (click)="saveApiKeyFromModal()">Salvar Chave</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Toast Notification Floating Message -->
+  @if (toastMessage()) {
+    <div class="toast-container animate-fade-in" [class]="'toast-' + toastType()">
+      <span class="toast-icon">
+        @if (toastType() === 'success') { ✓ }
+        @else if (toastType() === 'error') { ⚠ }
+        @else { ℹ }
+      </span>
+      <span class="toast-text">{{ toastMessage() }}</span>
+    </div>
+  }
+</div>
